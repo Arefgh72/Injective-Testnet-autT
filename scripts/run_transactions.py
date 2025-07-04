@@ -199,7 +199,7 @@ def write_swap_outputs(data):
     except Exception as e:
         print(f'خطا در نوشتن در فایل {SWAP_OUTPUTS_FILE}: {e}')
 
-async def send_transaction(to_address, value, gas_limit, data, retries=5, delay=5):
+async def send_transaction(to_address, value, gas_limit, data, retries=10, delay=20):
     """ارسال یک تراکنش امضا شده با قابلیت تلاش مجدد."""
     for attempt in range(retries):
         current_nonce = w3.eth.get_transaction_count(SENDER_ADDRESS, 'pending')
