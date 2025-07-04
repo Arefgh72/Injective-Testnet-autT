@@ -74,7 +74,7 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
             
             print(f'🚀 در حال ارسال تراکنش دیپلوی به: {to_address if to_address else "شبکه (دیپلوی)"}، Nonce: {current_nonce}، Gas: {gas_limit} (تلاش {attempt + 1}/{retries})')
             
-            tx_hash = w3.eth.send_raw_transaction(signed_transaction.raw_transaction)
+            tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction) # تغییر t کوچک به T بزرگ
             print(f"  تراکنش ارسال شد. هش: {encode_hex(tx_hash)}")
             
             tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=300)
