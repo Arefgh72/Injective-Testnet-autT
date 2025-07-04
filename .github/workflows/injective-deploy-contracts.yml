@@ -31,7 +31,10 @@ jobs:
       - name: 🔧 Install Solidity Compiler (solc)
         run: |
           sudo apt-get update
-          sudo apt-get install -y solc # نصب solc از طریق apt-get
+          sudo apt-get install -y software-properties-common # ابزارهای لازم برای اضافه کردن PPA
+          sudo add-apt-repository -y ppa:ethereum/ethereum # اضافه کردن PPA اوبونتو برای اتریوم (شامل solc)
+          sudo apt-get update
+          sudo apt-get install -y solc # حالا solc باید پیدا شود و نصب گردد
         
       # **مهم:** نصب OpenZeppelin Contracts
       # این مرحله برای اینکه solc بتونه @openzeppelin/contracts رو پیدا کنه، ضروریه.
