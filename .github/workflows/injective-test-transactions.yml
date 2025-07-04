@@ -1,17 +1,18 @@
 # .github/workflows/injective-test-transactions.yml
 
-name: Injective Manual Test Transactions
+name: Injective Manual Test Transactions # نام این Workflow
 
 on:
-  workflow_dispatch: # این به شما امکان می‌دهد تا Workflow را به صورت دستی اجرا کنید
+  workflow_dispatch: # این به شما امکان می‌دهد تا Workflow را به صورت دستی از تب "Actions" اجرا کنید
 
 jobs:
   test-transactions:
-    runs-on: ubuntu-latest # استفاده از آخرین نسخه اوبونتو
+    runs-on: ubuntu-latest # سیستم عاملی که Job روی آن اجرا می‌شود
     
     # متغیرهای محیطی که برای اسکریپت Node.js نیاز داریم
     env:
       INJECTIVE_PRIVATE_KEY: ${{ secrets.INJECTIVE_PRIVATE_KEY }} # کلید خصوصی شما از GitHub Secrets
+      TEST_MODE: 'true' # این خط حالت تست را در اسکریپت فعال می‌کند
 
     steps:
       - name: ⬇️ Checkout Repository
@@ -26,14 +27,7 @@ jobs:
         run: npm install # نصب وابستگی‌های تعریف شده در package.json
 
       - name: 📂 Create data directory if not exists
-        run: mkdir -p data # اطمینان از وجود دایرکتوری data
+        run: mkdir -p data # اطمینان از وجود دایرکتوری data (جایی که swap-outputs.json قرار می‌گیرد)
         
       - name: 🚀 Run All Injective Transactions (Test Mode)
-        run: |
-          # تنظیم متغیرهای محیطی برای اجرای فوری تمام تراکنش‌ها
-          # این باعث میشه اسکریپت فکر کنه زمان اجرای همه تراکنش‌ها هست
-          # برای تست کامل، پیشنهاد میشه که تمام زمان‌بندی‌های مشخص شده در run-transactions.js رو موقتاً به زمان فعلی یا نزدیک به زمان فعلی تغییر بدید.
-          # یا اینکه یک آرگومان به اسکریپت run-transactions.js اضافه کنیم تا حالت تست رو فعال کنه.
-          # برای سادگی، فعلا پیشنهاد می‌کنم زمان‌ها رو در اسکریپت run-transactions.js موقتاً تغییر بدید.
-          echo "Running transactions in test mode. Please ensure your script's schedules are adjusted for immediate testing or use a dedicated test flag in the script."
-          npm start
+        run: npm start # اجرای اسکریپت Node.js شما
