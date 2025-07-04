@@ -1,33 +1,32 @@
 # .github/workflows/injective-test-transactions.yml
 
-name: Injective Manual Test Transactions # نام این Workflow
+name: Injective Manual Test Transactions (Python) # نام این Workflow برای تست
 
 on:
-  workflow_dispatch: # این به شما امکان می‌دهد تا Workflow را به صورت دستی از تب "Actions" اجرا کنید
+  workflow_dispatch: # این به شما امکان می‌دهد تا Workflow رو به صورت دستی اجرا کنید
 
 jobs:
-  test-transactions:
-    runs-on: ubuntu-latest # سیستم عاملی که Job روی آن اجرا می‌شود
+  test-python-transactions:
+    runs-on: ubuntu-latest # استفاده از آخرین نسخه اوبونتو
     
-    # متغیرهای محیطی که برای اسکریپت Node.js نیاز داریم
     env:
       INJECTIVE_PRIVATE_KEY: ${{ secrets.INJECTIVE_PRIVATE_KEY }} # کلید خصوصی شما از GitHub Secrets
-      TEST_MODE: 'true' # این خط حالت تست را در اسکریپت فعال می‌کند
+      TEST_MODE: 'true' # اینجا حالت تست رو فعال می‌کنیم
 
     steps:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4 # برای دسترسی به فایل‌های ریپازیتوری
         
-      - name: 🛠️ Setup Node.js
-        uses: actions/setup-node@v4
+      - name: 🛠️ Setup Python
+        uses: actions/setup-python@v5 # استفاده از اکشن setup-python
         with:
-          node-version: '20' # از Node.js نسخه 20 استفاده شود
+          python-version: '3.10' # استفاده از پایتون نسخه 3.10 (یا هر نسخه مناسب دیگر)
 
-      - name: 📦 Install Dependencies
-        run: npm install # نصب وابستگی‌های تعریف شده در package.json
+      - name: 📦 Install Python Dependencies
+        run: pip install -r requirements.txt # نصب وابستگی‌های تعریف شده در requirements.txt
 
       - name: 📂 Create data directory if not exists
-        run: mkdir -p data # اطمینان از وجود دایرکتوری data (جایی که swap-outputs.json قرار می‌گیرد)
+        run: mkdir -p data # اطمینان از وجود دایرکتوری data
         
       - name: 🚀 Run All Injective Transactions (Test Mode)
-        run: npm start # اجرای اسکریپت Node.js شما
+        run: python scripts/run_transactions.py # اجرای اسکریپت پایتون شما
