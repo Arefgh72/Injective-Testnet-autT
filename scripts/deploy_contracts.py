@@ -4,11 +4,10 @@ import os
 import json
 import time
 import random
+import subprocess # اضافه شده: برای اجرای دستورات سیستمی
 from web3 import Web3, HTTPProvider
 from eth_account import Account
 from eth_utils import to_checksum_address, decode_hex, encode_hex
-# تغییر در Import کامپایلر: استفاده از pysolcx
-from pysolcx import compile_solc, install_solc, get_solc_version, set_solc_version, get_installed_solc_versions
 
 # --- 1. تنظیمات (Configuration) ---
 
@@ -83,7 +82,6 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
             if tx_receipt.status == 1:
                 print(f'✅ تراکنش موفق! هش: {encode_hex(tx_receipt.transactionHash)}, آدرس قرارداد: {tx_receipt.contractAddress}')
                 if tx_receipt.contractAddress:
-                    # EXPLORER_URL_TX_FORMAT رو در اینجا تعریف نکرده بودیم
                     explorer_url_tx_format = "https://testnet.blockscout.injective.network/tx/{}"
                     print(f"  مشاهده در اکسپلورر: {explorer_url_tx_format.format(encode_hex(tx_receipt.transactionHash))}")
                 return tx_receipt
@@ -106,53 +104,64 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
 
 
 def compile_contract(contract_name, contract_path, base_path):
-    """کامپایل یک فایل Solidity و بازگرداندن ABI و Bytecode."""
-    print(f"\n--- در حال کامپایل {contract_name}.sol ---")
+    """کامپایل یک فایل Solidity با استفاده از solc به صورت subprocess."""
+    print(f"\n--- در حال کامپایل {contract_name}.sol با solc مستقیم ---")
     
-    with open(contract_path, 'r') as f:
-        source_code = f.read()
+    # دستور کامپایل solc
+    # -o . --bin --abi : خروجی باینری و ABI را در دایرکتوری جاری قرار می‌دهد
+    # --overwrite : فایل‌های موجود را بازنویسی می‌کند
+    # --allow-paths : به solc اجازه می‌دهد فایل‌های import شده را از مسیر base_path پیدا کند
+    # --base-path : مشخص کردن مسیر پایه برای import ها (اینجا هم دایرکتوری contracts)
+    
+    output_dir = os.path.dirname(contract_path) # خروجی در همان دایرکتوری قراردادها
+    
+    try:
+        command = [
+            "solc",
+            "--base-path", base_path, # مسیر پایه برای import ها
+            "--bin",
+            "--abi",
+            "--overwrite",
+            "--output-dir", output_dir, # دایرکتوری خروجی
+            contract_path
+        ]
+        
+        # اجرای دستور solc
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        print("Solc Output (stdout):\n", result.stdout)
+        if result.stderr:
+            print("Solc Errors (stderr):\n", result.stderr)
 
-    # استفاده از compile_solc از pysolcx
-    # allow_paths برای پیدا کردن import ها
-    compiled_sol = compile_solc(
-        source_code,
-        solc_version="0.8.20",
-        base_path=base_path, # base_path رو به دایرکتوری که import ها توشن میدیم
-        output_values=["abi", "bin"]
-    )
-    
-    # استخراج ABI و Bytecode (نحوه دسترسی به خروجی در pysolcx کمی متفاوته)
-    # خروجی مستقیماً شامل نام فایل و نام قرارداد است
-    # مثال: {'<stdin>': {'SimpleStorage': {'abi': [...], 'bin': '...'}}}
-    # اگر از compile_files استفاده میکردید، خروجی به شکل {'file.sol:ContractName': {...}} بود.
-    # برای سازگاری با compile_files که قبلاً توی نمونه‌تون بود:
-    contract_key = f"{os.path.basename(contract_path)}:{contract_name}"
-    
-    bytecode = compiled_sol[contract_key]['bin']
-    abi = compiled_sol[contract_key]['abi']
-    
-    print(f"✅ {contract_name}.sol با موفقیت کامپایل شد.")
-    return bytecode, abi
+        # خواندن ABI و Bytecode از فایل‌های تولید شده
+        abi_file_path = os.path.join(output_dir, f"{contract_name}.abi")
+        bin_file_path = os.path.join(output_dir, f"{contract_name}.bin")
+
+        with open(abi_file_path, 'r') as f:
+            abi = json.load(f)
+        with open(bin_file_path, 'r') as f:
+            bytecode = f.read().strip() # حذف فضای خالی اضافی
+
+        print(f"✅ {contract_name}.sol با موفقیت کامپایل شد و ABI/Bytecode از فایل‌ها خوانده شد.")
+        return bytecode, abi
+    except subprocess.CalledProcessError as e:
+        print(f"🚨 خطا در اجرای solc برای {contract_name}.sol: {e}")
+        print(f"Solc stdout: {e.stdout}")
+        print(f"Solc stderr: {e.stderr}")
+        raise
+    except FileNotFoundError:
+        print("🚨 خطا: دستور 'solc' پیدا نشد. مطمئن شوید solc نصب و در PATH سیستم است.")
+        raise
+    except Exception as e:
+        print(f"🚨 خطای ناشناخته در کامپایل {contract_name}.sol: {e}")
+        raise
 
 # --- 3. تابع اصلی دیپلوی ---
 
 async def main():
     print('--- شروع فرآیند دیپلوی قراردادها ---')
 
-    print("در حال بررسی و نصب کامپایلر solc (از طریق pysolcx)...")
-    try:
-        # pysolcx خودش میتونه solc رو دانلود و نصب کنه.
-        # ابتدا چک میکنیم نسخه 0.8.20 نصب شده یا نه.
-        installed_versions = get_installed_solc_versions()
-        if "v0.8.20" not in [str(v) for v in installed_versions]:
-            install_solc('0.8.20')
-            print("solc 0.8.20 با موفقیت نصب شد.")
-        else:
-            print(f"solc {get_solc_version()} از قبل نصب شده است.")
-        set_solc_version('0.8.20') 
-    except Exception as e:
-        print(f"🚨 خطا در نصب یا تنظیم solc: {e}")
-        exit(1)
+    # دیگر نیازی به نصب solc با پایتون نیست، چون مستقیماً از سیستم استفاده می‌کنیم.
+    # نصب solc به صورت global در Workflow انجام خواهد شد.
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
     contracts_dir = os.path.join(project_root, "contracts")
