@@ -51,7 +51,7 @@ print(f'آدرس کیف پول فرستنده: {SENDER_ADDRESS}')
 # آدرس قراردادها و توکن‌ها (به‌روزرسانی شده با آدرس‌های رسمی شما)
 CONTRACT_ADDRESSES = {
   'STAKING': to_checksum_address('0x494401396FD1cf51cDD13e29eCFA769F49e1F5D3'), 
-  'WARP_UNWARP_WINJ': to_checksum_address('0x0000000088827d2d103ee2d9A6b781773AE03FfB'), # wINJ رسمی برای Warp/Unwarp
+  'WARP_UNWARP_WINJ': to_checksum_address('0x5Ae9B425f58B78e0d5e7e5a7A75c5f5B45d143B7'), # wINJ رسمی برای Warp/Unwarp
   'DEX_BSWAP': to_checksum_address('0x822f872763B7Be16c9b9687D8b9D73f1b5017Df0'), 
   'USDT_TOKEN': to_checksum_address('0xaDC7bcB5d8fe053Ef19b4E0C861c262Af6e0db60'), # USDT رسمی
   'SWAP_WINJ_TOKEN': to_checksum_address('0x0000000088827d2d103ee2d9A6b781773AE03FfB'), # wINJ رسمی برای Swap (همان wINJ Warp/Unwrap)
