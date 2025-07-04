@@ -43,10 +43,6 @@ if not w3.is_connected():
     exit(1)
 print(f'اتصال به شبکه {RPC_URL} برقرار شد.')
 
-# تبدیل کلید خصوصی به بایت
-# این خط در پایتون لازم نیست زیرا Account.from_key مستقیماً از رشته private key استفاده می‌کند
-# privateKeyBytes = web3.utils.hexToBytes(PRIVATE_KEY.startsWith('0x') ? PRIVATE_KEY : '0x' + PRIVATE_KEY);
-
 # آدرس فرستنده (کیف پول شما) که از کلید خصوصی مشتق می‌شود
 account = Account.from_key(PRIVATE_KEY)
 SENDER_ADDRESS = to_checksum_address(account.address)
@@ -55,7 +51,7 @@ print(f'آدرس کیف پول فرستنده: {SENDER_ADDRESS}')
 # آدرس قراردادها و توکن‌ها (به‌روزرسانی شده با آدرس‌های رسمی شما)
 CONTRACT_ADDRESSES = {
   'STAKING': to_checksum_address('0x494401396FD1cf51cDD13e29eCFA769F49e1F5D3'), 
-  'WARP_UNWARP_WINJ': to_checksum_address('0x0000000088827d2d103ee2d9A6b781773AE03FfB'), # wINJ رسمی برای Warp/Unwrap
+  'WARP_UNWARP_WINJ': to_checksum_address('0x0000000088827d2d103ee2d9A6b781773AE03FfB'), # wINJ رسمی برای Warp/Unwarp
   'DEX_BSWAP': to_checksum_address('0x822f872763B7Be16c9b9687D8b9D73f1b5017Df0'), 
   'USDT_TOKEN': to_checksum_address('0xaDC7bcB5d8fe053Ef19b4E0C861c262Af6e0db60'), # USDT رسمی
   'SWAP_WINJ_TOKEN': to_checksum_address('0x0000000088827d2d103ee2d9A6b781773AE03FfB'), # wINJ رسمی برای Swap (همان wINJ Warp/Unwrap)
@@ -73,7 +69,7 @@ FIXED_GAS_PRICE_WEI = w3.to_wei('0.192', 'gwei')
 
 GAS_LIMITS = {
   'STAKE': 5297304,
-  'WARP': 52619,
+  'WARP': 100000,    # افزایش Gas Limit برای Warp به 100,000 برای اطمینان بیشتر
   'UNSTAKE': 6623965,
   'SWAP': 657795,
 }
@@ -153,7 +149,7 @@ ALL_TRANSACTIONS = [
       {'hour': 0, 'minute': 0}, # 24:00 UTC
     ],
   },
-]
+];
 
 # --- 2. توابع کمکی (Helper Functions) ---
 
@@ -203,39 +199,50 @@ def write_swap_outputs(data):
     except Exception as e:
         print(f'خطا در نوشتن در فایل {SWAP_OUTPUTS_FILE}: {e}')
 
-async def send_transaction(to_address, value, gas_limit, data):
-    """ارسال یک تراکنش امضا شده."""
-    # Nonce را بلافاصله قبل از ارسال هر تراکنش از شبکه دریافت می‌کنیم
-    # این کار برای اطمینان از صحت Nonce در تراکنش‌های پشت سر هم ضروری است.
-    current_nonce = w3.eth.get_transaction_count(SENDER_ADDRESS, 'pending')
-    print(f"   (دریافت Nonce لحظه‌ای: {current_nonce})")
+async def send_transaction(to_address, value, gas_limit, data, retries=5, delay=5):
+    """ارسال یک تراکنش امضا شده با قابلیت تلاش مجدد."""
+    for attempt in range(retries):
+        current_nonce = w3.eth.get_transaction_count(SENDER_ADDRESS, 'pending')
+        print(f"   (دریافت Nonce لحظه‌ای برای تلاش {attempt + 1}/{retries}: {current_nonce})")
 
-    try:
-        transaction = {
-            'from': SENDER_ADDRESS,
-            'to': to_checksum_address(to_address),
-            'value': value, # مقدار باید به wei باشد
-            'gas': gas_limit,
-            'gasPrice': FIXED_GAS_PRICE_WEI,
-            'nonce': current_nonce,
-            'chainId': CHAIN_ID,
-            'data': data
-        }
-        
-        # امضای تراکنش
-        signed_transaction = w3.eth.account.sign_transaction(transaction, private_key=PRIVATE_KEY)
-        
-        print(f'در حال ارسال تراکنش به: {to_checksum_address(to_address)}، Nonce: {current_nonce}، Value: {w3.from_wei(value, "ether")} INJ')
-        
-        # ارسال تراکنش
-        tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120) # افزایش زمان انتظار
-        
-        print(f'تراکنش موفق! هش: {encode_hex(receipt.transactionHash)}')
-        return receipt
-    except Exception as e:
-        print(f'خطا در ارسال تراکنش به {to_address} (Nonce: {current_nonce}): {e}')
-        raise # خطا را به تابع فراخواننده برمی‌گردانیم
+        try:
+            transaction = {
+                'from': SENDER_ADDRESS,
+                'to': to_checksum_address(to_address),
+                'value': value, # مقدار باید به wei باشد
+                'gas': gas_limit,
+                'gasPrice': FIXED_GAS_PRICE_WEI,
+                'nonce': current_nonce, # Nonce در هر تلاش تازه دریافت می‌شود
+                'chainId': CHAIN_ID,
+                'data': data
+            }
+            
+            # امضای تراکنش
+            signed_transaction = w3.eth.account.sign_transaction(transaction, private_key=PRIVATE_KEY)
+            
+            print(f'در حال ارسال تراکنش به: {to_checksum_address(to_address)}، Nonce: {current_nonce}، Value: {w3.from_wei(value, "ether")} INJ (تلاش {attempt + 1}/{retries})')
+            
+            # ارسال تراکنش
+            tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120) # افزایش زمان انتظار
+            
+            print(f'تراکنش موفق! هش: {encode_hex(receipt.transactionHash)}')
+            return receipt # تراکنش موفق، از تابع خارج می‌شویم
+        except Exception as e:
+            error_message = str(e)
+            print(f'خطا در ارسال تراکنش به {to_address} (Nonce: {current_nonce}, تلاش {attempt + 1}/{retries}): {error_message}')
+            
+            # بررسی نوع خطا برای تصمیم‌گیری درباره تلاش مجدد
+            if "invalid nonce" in error_message or "mempool is full" in error_message or "503" in error_message or "Service Temporarily Unavailable" in error_message or "nonce too low" in error_message or "already known" in error_message:
+                print(f"   تلاش مجدد در {delay} ثانیه...")
+                time.sleep(delay)
+            else:
+                # برای خطاهای دیگر که با تلاش مجدد حل نمی‌شوند، بلافاصله خطا را بالا می‌بریم
+                print("   خطای غیرقابل حل با تلاش مجدد. توقف.")
+                raise # خطا را بلافاصله برمی‌گردانیم
+    
+    # اگر بعد از همه تلاش‌ها هم تراکنش موفق نشد
+    raise Exception(f"تراکنش به {to_address} بعد از {retries} تلاش ناموفق بود.")
 
 # --- 3. توابع اجرای تراکنش‌های خاص ---
 
@@ -274,11 +281,15 @@ async def execute_warp(repeats):
                 gas_limit=config['gas_limit'],
                 data=config['method_id'],
             )
+            # اگر تراکنش موفق بود، تاخیر می‌دهیم (این تاخیر بین تکرارهاست)
+            time.sleep(10) # تاخیر 10 ثانیه‌ای
         except Exception as e:
             print(f'   تکرار وارپ {i + 1} شکست خورد: {e}. ادامه به تکرار بعدی...')
-        
-        # افزایش تاخیر برای کاهش فشار بر RPC و جلوگیری از nonce issues
-        time.sleep(10) # تاخیر 10 ثانیه‌ای (اصلاح شده)
+            # اگر send_transaction خطای قابل حل با retry داده باشد، خودش retry می‌کند.
+            # در غیر این صورت، این حلقه فقط خطا را لاگ کرده و به تکرار بعدی می‌رود.
+            # اینجا دیگر نیازی به time.sleep اضافه نیست چون send_transaction خودش تاخیر retry دارد
+            # اما یک تاخیر کوچک برای بین تکرارها همچنان مفید است.
+            time.sleep(1) # تاخیر کوچک برای جلوگیری از ارسال سریع تراکنش بعدی در صورت شکست
 
 async def execute_unstake():
     """اجرای تراکنش آن‌استیک."""
@@ -289,7 +300,6 @@ async def execute_unstake():
     amount_in_smallest_unit = to_smallest_unit(config['amount'], TOKEN_DECIMALS['INJ'])
     
     # ساخت فیلد data شامل Method ID و مقدار به عنوان پارامتر
-    # Method ID + مقدار (پد شده به 32 بایت)
     # web3.py نیاز به bytes برای data دارد
     data_hex = config['method_id'] + w3.to_hex(amount_in_smallest_unit)[2:].zfill(64)
     data_bytes = decode_hex(data_hex)
@@ -364,9 +374,10 @@ async def execute_swap_usdt_to_winj(run_time_key):
                 if log['address'].lower() == CONTRACT_ADDRESSES['SWAP_WINJ_TOKEN'].lower():
                     try:
                         # از web3.py برای دیکد کردن لاگ استفاده می‌کنیم
-                        decoded_log = winj_token_contract_instance.events.Transfer().process_receipt({'logs': [log]})
-                        if decoded_log and decoded_log[0]['args']['to'].lower() == config['recipient'].lower():
-                            winj_received = decoded_log[0]['args']['value']
+                        # process_receipt انتظار یک لیست از رسیدها را دارد
+                        processed_logs = winj_token_contract_instance.events.Transfer().process_receipt({'logs': [log]})
+                        if processed_logs and processed_logs[0]['args']['to'].lower() == config['recipient'].lower():
+                            winj_received = processed_logs[0]['args']['value']
                             print(f'دریافت شد: {from_smallest_unit(winj_received, TOKEN_DECIMALS["SWAP_WINJ"])} wINJ (سواپ)')
                             break # اولین لاگ Transfer مرتبط رو پیدا کردیم
                     except Exception as e:
