@@ -1,0 +1,38 @@
+# .github/workflows/injective-deploy-contracts.yml
+
+name: Injective Daily Contract Deployment
+
+on:
+  schedule:
+    # هر 30 دقیقه یک بار اجرا شود
+    - cron: '*/30 * * * *' 
+  workflow_dispatch: # برای اجرای دستی
+
+jobs:
+  deploy-contracts:
+    runs-on: ubuntu-latest
+    
+    env:
+      INJECTIVE_PRIVATE_KEY: ${{ secrets.INJECTIVE_PRIVATE_KEY }} # نام Secret صحیح
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: 🛠️ Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: 📦 Install Python Dependencies
+        run: pip install -r requirements.txt # web3.py, solcx, pytz, python-dotenv نصب میشن
+
+      # **مهم:** نصب OpenZeppelin Contracts برای کامپایل MyNFT.sol
+      # این مرحله برای اینکه کامپایلر Solidity بتونه @openzeppelin/contracts رو پیدا کنه، ضروریه.
+      - name: 📦 Install OpenZeppelin Contracts (for Solidity imports)
+        run: |
+          npm install @openzeppelin/contracts # npm در محیط GitHub Actions موجوده
+        # نیازی به working-directory نیست اگر در ریشه نصب شود و solcx بتواند آن را پیدا کند.
+
+      - name: 🚀 Run Contract Deployment Script
+        run: python scripts/deploy_contracts.py
