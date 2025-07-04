@@ -69,7 +69,7 @@ FIXED_GAS_PRICE_WEI = w3.to_wei('0.192', 'gwei')
 
 GAS_LIMITS = {
   'STAKE': 5297304,
-  'WARP': 100000,    # افزایش Gas Limit برای Warp به 100,000 برای اطمینان بیشتر
+  'WARP': 300000,    # افزایش Gas Limit برای Warp به 100,000 برای اطمینان بیشتر
   'UNSTAKE': 6623965,
   'SWAP': 657795,
 }
