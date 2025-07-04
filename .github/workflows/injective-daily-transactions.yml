@@ -1,6 +1,6 @@
 # .github/workflows/injective-daily-transactions.yml
 
-name: Injective Daily Testnet Transactions
+name: Injective Daily Testnet Transactions (Python)
 
 on:
   schedule:
@@ -45,33 +45,33 @@ on:
     # اجرا در 00:00 UTC (نیمه‌شب) برای سواپ wINJ به USDT
     - cron: '0 0 * * *'
 
-  workflow_dispatch: # این به شما امکان می‌دهد تا Workflow را به صورت دستی هم اجرا کنید
+  workflow_dispatch: # این به شما امکان می‌دهد تا Workflow رو به صورت دستی هم اجرا کنید
   push:
     branches:
       - main # در صورت push به شاخه main، Workflow اجرا شود (اختیاری، می‌توانید حذف کنید)
 
 jobs:
-  run-transactions:
+  run-python-transactions:
     runs-on: ubuntu-latest # استفاده از آخرین نسخه اوبونتو
     
-    # متغیرهای محیطی که برای اسکریپت Node.js نیاز داریم
     env:
       INJECTIVE_PRIVATE_KEY: ${{ secrets.INJECTIVE_PRIVATE_KEY }} # کلید خصوصی شما از GitHub Secrets
+      # TEST_MODE رو اینجا تنظیم نمی‌کنیم، چون این Workflow برای اجرای زمان‌بندی شده است.
 
     steps:
       - name: ⬇️ Checkout Repository
         uses: actions/checkout@v4 # برای دسترسی به فایل‌های ریپازیتوری
         
-      - name: 🛠️ Setup Node.js
-        uses: actions/setup-node@v4
+      - name: 🛠️ Setup Python
+        uses: actions/setup-python@v5 # استفاده از اکشن setup-python
         with:
-          node-version: '20' # از Node.js نسخه 20 استفاده شود
+          python-version: '3.10' # استفاده از پایتون نسخه 3.10 (یا هر نسخه مناسب دیگر)
 
-      - name: 📦 Install Dependencies
-        run: npm install # نصب وابستگی‌های تعریف شده در package.json
+      - name: 📦 Install Python Dependencies
+        run: pip install -r requirements.txt # نصب وابستگی‌های تعریف شده در requirements.txt
 
       - name: 📂 Create data directory if not exists
         run: mkdir -p data # اطمینان از وجود دایرکتوری data
         
       - name: 🚀 Run Injective Transactions
-        run: npm start # اجرای اسکریپت Node.js
+        run: python scripts/run_transactions.py # اجرای اسکریپت پایتون شما
