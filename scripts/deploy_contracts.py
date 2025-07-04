@@ -4,7 +4,7 @@ import os
 import json
 import time
 import random
-import subprocess # اضافه شده: برای اجرای دستورات سیستمی
+import subprocess # برای اجرای دستورات سیستمی
 from web3 import Web3, HTTPProvider
 from eth_account import Account
 from eth_utils import to_checksum_address, decode_hex, encode_hex
@@ -82,7 +82,6 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
             if tx_receipt.status == 1:
                 print(f'✅ تراکنش موفق! هش: {encode_hex(tx_receipt.transactionHash)}, آدرس قرارداد: {tx_receipt.contractAddress}')
                 if tx_receipt.contractAddress:
-                    # EXPLORER_URL_TX_FORMAT رو اینجا تعریف می‌کنیم چون global نیست
                     explorer_url_tx_format = "https://testnet.blockscout.injective.network/tx/{}" 
                     print(f"  مشاهده در اکسپلورر: {explorer_url_tx_format.format(encode_hex(tx_receipt.transactionHash))}")
                 return tx_receipt
@@ -104,29 +103,25 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
     raise Exception(f"تراکنش دیپلوی بعد از {retries} تلاش ناموفق بود.")
 
 
-def compile_contract(contract_name, contract_path, base_path, project_root):
+def compile_contract(contract_name, contract_path, contracts_base_path, project_root):
     """کامپایل یک فایل Solidity با استفاده از solc به صورت subprocess."""
     print(f"\n--- در حال کامپایل {contract_name}.sol با solc مستقیم ---")
     
     output_dir = os.path.dirname(contract_path)
     
-    # تعریف remappings برای OpenZeppelin Contracts
-    # این به solc میگه که "@openzeppelin/" رو به مسیر واقعی در node_modules مپ کنه
-    # فرض بر این است که node_modules در ریشه پروژه (project_root) قرار دارد.
-    remappings = [
-        f"@openzeppelin/={project_root}/node_modules/@openzeppelin/"
-    ]
-    
+    # مسیر node_modules برای OpenZeppelin
+    node_modules_path = os.path.join(project_root, "node_modules")
+
     try:
         command = [
             "solc",
-            "--base-path", base_path, # مسیر پایه برای import های معمولی (مثلاً همین دایرکتوری contracts)
+            "--base-path", contracts_base_path, # مسیر پایه برای import های معمولی (مثلاً همین دایرکتوری contracts)
+            "--include-path", node_modules_path, # **مهم:** مسیر node_modules برای import های OpenZeppelin
             "--bin",
             "--abi",
             "--overwrite",
             "--output-dir", output_dir,
-            contract_path,
-            *([f"--remappings={r}" for r in remappings]) # اضافه کردن remappings به دستور solc
+            contract_path # فایل قراردادی که قرار است کامپایل شود
         ]
         
         # اجرای دستور solc
@@ -142,7 +137,7 @@ def compile_contract(contract_name, contract_path, base_path, project_root):
         with open(abi_file_path, 'r') as f:
             abi = json.load(f)
         with open(bin_file_path, 'r') as f:
-            bytecode = f.read().strip() # حذف فضای خالی اضافی
+            bytecode = f.read().strip()
 
         print(f"✅ {contract_name}.sol با موفقیت کامپایل شد و ABI/Bytecode از فایل‌ها خوانده شد.")
         return bytecode, abi
@@ -170,16 +165,16 @@ async def main():
     simple_storage_bytecode, simple_storage_abi = compile_contract(
         "SimpleStorage", 
         os.path.join(contracts_dir, "SimpleStorage.sol"),
-        base_path=contracts_dir,
-        project_root=project_root # اضافه کردن project_root
+        contracts_base_path=contracts_dir, # base_path رو به دایرکتوری contracts میدیم
+        project_root=project_root 
     )
     
     # کامپایل MyNFT
     my_nft_bytecode, my_nft_abi = compile_contract(
         "MyNFT", 
         os.path.join(contracts_dir, "MyNFT.sol"), 
-        base_path=contracts_dir, # base_path رو به دایرکتوری contracts میدیم
-        project_root=project_root # اضافه کردن project_root
+        contracts_base_path=contracts_dir, # base_path رو به دایرکتوری contracts میدیم
+        project_root=project_root 
     )
 
     num_deploys = 10
