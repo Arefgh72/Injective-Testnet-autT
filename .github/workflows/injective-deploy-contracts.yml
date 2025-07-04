@@ -29,10 +29,9 @@ jobs:
       # **جدید و مهم:** نصب کامپایلر solc به صورت مستقیم
       # این اکشن solc رو به PATH سیستم اضافه می‌کنه.
       - name: 🔧 Install Solidity Compiler (solc)
-        uses: actions/setup-node@v4 # از این اکشن برای دسترسی به npm و نصب solc استفاده می‌کنیم
-        with:
-          node-version: '20' # نیاز به Node.js برای نصب solc global
-      - run: npm install -g solc@0.8.20 # نصب solc نسخه 0.8.20 به صورت گلوبال
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y solc # نصب solc از طریق apt-get
         
       # **مهم:** نصب OpenZeppelin Contracts
       # این مرحله برای اینکه solc بتونه @openzeppelin/contracts رو پیدا کنه، ضروریه.
