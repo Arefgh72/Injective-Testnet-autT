@@ -82,7 +82,8 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
             if tx_receipt.status == 1:
                 print(f'✅ تراکنش موفق! هش: {encode_hex(tx_receipt.transactionHash)}, آدرس قرارداد: {tx_receipt.contractAddress}')
                 if tx_receipt.contractAddress:
-                    explorer_url_tx_format = "https://testnet.blockscout.injective.network/tx/{}"
+                    # EXPLORER_URL_TX_FORMAT رو اینجا تعریف می‌کنیم چون global نیست
+                    explorer_url_tx_format = "https://testnet.blockscout.injective.network/tx/{}" 
                     print(f"  مشاهده در اکسپلورر: {explorer_url_tx_format.format(encode_hex(tx_receipt.transactionHash))}")
                 return tx_receipt
             else:
@@ -103,27 +104,29 @@ async def send_transaction(to_address, value, gas_limit, data, retries=10, delay
     raise Exception(f"تراکنش دیپلوی بعد از {retries} تلاش ناموفق بود.")
 
 
-def compile_contract(contract_name, contract_path, base_path):
+def compile_contract(contract_name, contract_path, base_path, project_root):
     """کامپایل یک فایل Solidity با استفاده از solc به صورت subprocess."""
     print(f"\n--- در حال کامپایل {contract_name}.sol با solc مستقیم ---")
     
-    # دستور کامپایل solc
-    # -o . --bin --abi : خروجی باینری و ABI را در دایرکتوری جاری قرار می‌دهد
-    # --overwrite : فایل‌های موجود را بازنویسی می‌کند
-    # --allow-paths : به solc اجازه می‌دهد فایل‌های import شده را از مسیر base_path پیدا کند
-    # --base-path : مشخص کردن مسیر پایه برای import ها (اینجا هم دایرکتوری contracts)
+    output_dir = os.path.dirname(contract_path)
     
-    output_dir = os.path.dirname(contract_path) # خروجی در همان دایرکتوری قراردادها
+    # تعریف remappings برای OpenZeppelin Contracts
+    # این به solc میگه که "@openzeppelin/" رو به مسیر واقعی در node_modules مپ کنه
+    # فرض بر این است که node_modules در ریشه پروژه (project_root) قرار دارد.
+    remappings = [
+        f"@openzeppelin/={project_root}/node_modules/@openzeppelin/"
+    ]
     
     try:
         command = [
             "solc",
-            "--base-path", base_path, # مسیر پایه برای import ها
+            "--base-path", base_path, # مسیر پایه برای import های معمولی (مثلاً همین دایرکتوری contracts)
             "--bin",
             "--abi",
             "--overwrite",
-            "--output-dir", output_dir, # دایرکتوری خروجی
-            contract_path
+            "--output-dir", output_dir,
+            contract_path,
+            *([f"--remappings={r}" for r in remappings]) # اضافه کردن remappings به دستور solc
         ]
         
         # اجرای دستور solc
@@ -160,9 +163,6 @@ def compile_contract(contract_name, contract_path, base_path):
 async def main():
     print('--- شروع فرآیند دیپلوی قراردادها ---')
 
-    # دیگر نیازی به نصب solc با پایتون نیست، چون مستقیماً از سیستم استفاده می‌کنیم.
-    # نصب solc به صورت global در Workflow انجام خواهد شد.
-
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
     contracts_dir = os.path.join(project_root, "contracts")
 
@@ -170,14 +170,16 @@ async def main():
     simple_storage_bytecode, simple_storage_abi = compile_contract(
         "SimpleStorage", 
         os.path.join(contracts_dir, "SimpleStorage.sol"),
-        base_path=contracts_dir 
+        base_path=contracts_dir,
+        project_root=project_root # اضافه کردن project_root
     )
     
     # کامپایل MyNFT
     my_nft_bytecode, my_nft_abi = compile_contract(
         "MyNFT", 
         os.path.join(contracts_dir, "MyNFT.sol"), 
-        base_path=contracts_dir 
+        base_path=contracts_dir, # base_path رو به دایرکتوری contracts میدیم
+        project_root=project_root # اضافه کردن project_root
     )
 
     num_deploys = 10
