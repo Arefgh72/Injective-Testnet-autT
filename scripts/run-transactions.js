@@ -14,9 +14,6 @@ if (!PRIVATE_KEY) {
   process.exit(1);
 }
 
-// تبدیل کلید خصوصی به بایت (اصلاح شده)
-const privateKeyBytes = web3.utils.hexToBytes(PRIVATE_KEY.startsWith('0x') ? PRIVATE_KEY : '0x' + PRIVATE_KEY);
-
 // اطلاعات شبکه Injective Testnet
 const RPC_URL = 'https://k8s.testnet.json-rpc.injective.network/';
 const CHAIN_ID = 1439; // Chain ID تست‌نت Injective
@@ -24,6 +21,9 @@ const CHAIN_ID = 1439; // Chain ID تست‌نت Injective
 // تنظیمات Web3
 const web3 = new Web3(RPC_URL);
 const common = Common.custom({ chainId: CHAIN_ID });
+
+// تبدیل کلید خصوصی به بایت
+const privateKeyBytes = web3.utils.hexToBytes(PRIVATE_KEY.startsWith('0x') ? PRIVATE_KEY : '0x' + PRIVATE_KEY);
 
 // آدرس فرستنده (کیف پول شما) که از کلید خصوصی مشتق می‌شود
 const SENDER_ACCOUNT = web3.eth.accounts.privateKeyToAccount(PRIVATE_KEY);
