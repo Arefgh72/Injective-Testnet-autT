@@ -2,7 +2,7 @@
 
 const Web3 = require('web3').default;
 const { TransactionFactory } = require('@ethereumjs/tx');
-const Common = require('@ethereumjs/common').default;
+const { Common } = require('@ethereumjs/common');
 const fs = require('fs-extra'); // For async file operations like read/write JSON
 
 // --- 1. تنظیمات (Configuration) ---
