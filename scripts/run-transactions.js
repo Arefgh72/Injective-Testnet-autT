@@ -1,6 +1,6 @@
 // scripts/run-transactions.js
 
-const Web3 = require('web3');
+const Web3 = require('web3').default;
 const { TransactionFactory } = require('@ethereumjs/tx');
 const Common = require('@ethereumjs/common').default;
 const fs = require('fs-extra'); // For async file operations like read/write JSON
