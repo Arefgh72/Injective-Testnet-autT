@@ -2,7 +2,6 @@
 
 const Web3 = require('web3');
 const { TransactionFactory } = require('@ethereumjs/tx');
-const { hexToBytes, bytesToHex } = require('@ethereumjs/util');
 const Common = require('@ethereumjs/common').default;
 const fs = require('fs-extra'); // For async file operations like read/write JSON
 
@@ -15,8 +14,8 @@ if (!PRIVATE_KEY) {
   process.exit(1);
 }
 
-// تبدیل کلید خصوصی به بایت
-const privateKeyBytes = hexToBytes(PRIVATE_KEY.startsWith('0x') ? PRIVATE_KEY : '0x' + PRIVATE_KEY);
+// تبدیل کلید خصوصی به بایت (اصلاح شده)
+const privateKeyBytes = web3.utils.hexToBytes(PRIVATE_KEY.startsWith('0x') ? PRIVATE_KEY : '0x' + PRIVATE_KEY);
 
 // اطلاعات شبکه Injective Testnet
 const RPC_URL = 'https://k8s.testnet.json-rpc.injective.network/';
@@ -123,7 +122,6 @@ const ALL_TRANSACTIONS = [
     methodId: '0x414bf389',
     inputTokenAddress: CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN,
     outputTokenAddress: CONTRACT_ADDRESSES.USDT_TOKEN,
-    // minAmountOut: برای تست‌نت، مقدار خیلی کمی در نظر می‌گیریم
     minAmountOut: '1', // 1 wei of USDT
     recipient: SENDER_ADDRESS,
     repeats: 1,
@@ -228,9 +226,9 @@ async function sendTransaction(txObject, currentNonce) {
     // ساخت تراکنش با EthereumJS Tx
     const tx = TransactionFactory.fromTxData(txData, { common });
     const signedTx = tx.sign(privateKeyBytes);
-    const serializedTx = bytesToHex(signedTx.serialize());
+    const serializedTx = web3.utils.bytesToHex(signedTx.serialize()); // اصلاح شده
 
-    console.log(`🚀 در حال ارسال تراکنش به: ${txObject.to}، Nonce: ${currentNonce}، Value: ${txObject.value ? fromSmallestUnit(txObject.value, TOKEN_DECIMALS.INJ) : '0'} INJ`);
+    console.log(`🚀 در حال ارسال تراکنش به: ${txObject.to}، Nonce: ${currentNonce}، Value: ${txObject.value && txObject.value !== '0x0' ? fromSmallestUnit(txObject.value, TOKEN_DECIMALS.INJ) : '0'} INJ`);
     const receipt = await web3.eth.sendSignedTransaction(serializedTx);
     console.log(`✅ تراکنش موفق! هش: ${receipt.transactionHash}`);
     return receipt;
@@ -366,71 +364,33 @@ async function executeSwapUsdtToWinj(nonce, runTimeKey) {
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const deadline = BigInt(currentTimestamp + (60 * 10)); // 10 دقیقه از الان
 
-  // بازسازی فیلد 'data' بر اساس نمونه ارسالی شما
-  // 0x414bf389 (Method ID)
-  // [path[0] - USDT] (32 bytes padded address)
-  // [path[1] - SWAP_WINJ] (32 bytes padded address)
-  // [amountIn] (32 bytes padded amount)
-  // [to] (32 bytes padded address - recipient)
-  // [deadline] (32 bytes padded timestamp)
-  // [minAmountOut] (32 bytes padded amount)
-  // [UNKNOWN_PARAM_1] (32 bytes, from sample: 0x00...036861bb4b0c4b) - مقدار ثابت از نمونه
-  // [UNKNOWN_PARAM_2] (32 bytes, from sample: 0x00...0000) - مقدار ثابت از نمونه
-  
-  const data = web3.eth.abi.encodeFunctionCall({
-    name: 'swapExactTokensForTokens', // نام متد واقعی (اگرچه فقط با methodId کار می‌کنیم)
-    type: 'function',
-    inputs: [
-      {type: 'uint256', name: 'amountIn'},
-      {type: 'uint256', name: 'amountOutMin'},
-      {type: 'address[]', name: 'path'},
-      {type: 'address', name: 'to'},
-      {type: 'uint256', name: 'deadline'}
-    ]
-  }, [
-    BigInt(inputAmountWei),
-    BigInt(minAmountOutWei),
-    [CONTRACT_ADDRESSES.USDT_TOKEN, CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN],
-    SENDER_ADDRESS,
-    BigInt(deadline)
-  ]).substring(2); // حذف '0x'
+  // بازسازی دقیق فیلد Data بر اساس نمونه شما
+  const methodId = config.methodId.substring(2); // حذف '0x'
+  const usdtAddrPadded = web3.utils.padLeft(CONTRACT_ADDRESSES.USDT_TOKEN.substring(2), 64);
+  const swapWinjAddrPadded = web3.utils.padLeft(CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN.substring(2), 64);
+  const inputAmountPadded = web3.utils.padLeft(web3.utils.toHex(inputAmountWei), 64).substring(2);
+  const recipientAddrPadded = web3.utils.padLeft(config.recipient.substring(2), 64);
+  const deadlinePadded = web3.utils.padLeft(web3.utils.toHex(deadline), 64).substring(2);
+  const minAmountOutPadded = web3.utils.padLeft(web3.utils.toHex(minAmountOutWei), 64).substring(2);
 
-  // توجه: این تابع `encodeFunctionCall` برای ABI استاندارد Uniswap/Pancakeswap است.
-  // نمونه Data شما (0x414bf389...) خیلی طولانی‌تر و پیچیده‌تر است و به نظر می‌رسد از فرمت استاندارد ABI پیروی نمی‌کند.
-  // ممکن است تابع فراخوانی شده، پارامترهای بیشتری داشته باشد یا روتر DEX شما یک فرمت خاص برای ارسال دیتا داشته باشد.
-  // برای دقت بیشتر، باید ABI دقیق قرارداد 0x822f872763B7Be16c9b9687D8b9D73f1b5017Df0 را داشته باشیم.
-  // فعلاً، با توجه به `Method ID` و مقادیر مورد نیاز، تلاش می‌کنیم که دیتا را مشابه نمونه شما بسازیم.
-  // این یک بازسازی تقریبی است و نیاز به تست دقیق دارد.
+  // پارامترهای ناشناس انتهایی از نمونه شما (ثابت)
+  const unknownParam1 = '00000000000000000000000000000000000000000000000000036861bb4b0c4b'; // از نمونه سواپ USDT به wINJ
+  const unknownParam2 = '0000000000000000000000000000000000000000000000000000000000000000'; // از نمونه سواپ USDT به wINJ
 
-  // بازسازی Data بر اساس نمونه شما:
-  // روش ساده‌تر: فقط Method ID را بگذاریم و بگوییم مقدار در value میاد.
-  // اما شما value: 0x0 فرستادید و data یک رشته طولانی.
-  // پس باید پارامترها در data Encode شوند.
-  // با توجه به اینکه شما خود Data را به صورت Raw فرستادید،
-  // دقیق‌ترین روش این است که آن را کپی کنیم و فقط مقدار inputAmount را تغییر دهیم.
-
-  // --- بازسازی دقیق فیلد Data بر اساس نمونه شما (با جایگذاری مقدار inputAmount) ---
-  // فرمت نمونه: MethodID + path[0] + path[1] + amountIn + to + deadline + minAmountOut + unknown1 + unknown2
-  const fixedPart1 = '414bf389' + // Method ID
-                     web3.utils.padLeft(CONTRACT_ADDRESSES.USDT_TOKEN.substring(2), 64) + // path[0] USDT
-                     web3.utils.padLeft(CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN.substring(2), 64); // path[1] SWAP_WINJ
-
-  const fixedPart2 = web3.utils.padLeft(SENDER_ADDRESS.substring(2), 64) + // to address
-                     web3.utils.padLeft(web3.utils.toHex(deadline), 64).substring(2) + // deadline
-                     web3.utils.padLeft(web3.utils.toHex(minAmountOutWei), 64).substring(2); // minAmountOut
-
-  // پارامترهای ناشناس انتهایی از نمونه شما
-  const unknownParam1 = '00000000000000000000000000000000000000000000000000036861bb4b0c4b';
-  const unknownParam2 = '0000000000000000000000000000000000000000000000000000000000000000';
-
-  // مقدار ورودی دینامیک
-  const amountInPadded = web3.utils.padLeft(web3.utils.toHex(inputAmountWei), 64).substring(2);
-
-  const fullData = '0x' + fixedPart1 + amountInPadded + fixedPart2 + unknownParam1 + unknownParam2;
+  const fullData = '0x' +
+                   methodId +
+                   usdtAddrPadded +
+                   swapWinjAddrPadded +
+                   inputAmountPadded +
+                   recipientAddrPadded +
+                   deadlinePadded +
+                   minAmountOutPadded +
+                   unknownParam1 +
+                   unknownParam2;
 
   const txObject = {
     to: config.contract,
-    value: '0x0', // مقدار اصلی از طریق data ارسال می‌شود
+    value: '0x0',
     gasLimit: config.gasLimit,
     data: fullData,
   };
@@ -446,28 +406,27 @@ async function executeSwapUsdtToWinj(nonce, runTimeKey) {
   // --- پس از موفقیت‌آمیز بودن تراکنش: دریافت مقدار wINJ دریافتی و ذخیره در فایل JSON ---
   let winjReceived = '0';
   if (receipt && receipt.logs) {
-    const swapWinjTokenContract = new web3.eth.Contract(
-      // ABI مینیمال برای Transfer event
-      [{"anonymous":false,"inputs":[{"indexed":true,"name":"from","type":"address"},{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Transfer","type":"event"}],
-      CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN
-    );
+    // ABI مینیمال برای Transfer event
+    const transferAbi = {"anonymous":false,"inputs":[{"indexed":true,"name":"from","type":"address"},{"indexed":true,"name":"to","type":"address"},{"indexed":false,"name":"value","type":"uint256"}],"name":"Transfer","type":"event"};
+    
+    const transferTopic = web3.eth.abi.encodeEventSignature(transferAbi);
+    const recipientTopic = web3.utils.padLeft(config.recipient.toLowerCase(), 64);
 
-    // فیلتر کردن لاگ‌های Transfer از قرارداد wINJ به آدرس فرستنده شما
     const transferLogs = receipt.logs.filter(log =>
       log.address.toLowerCase() === CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN.toLowerCase() &&
-      log.topics.length === 3 && // Transfer event has 3 topics (signature + from + to)
-      log.topics[2].toLowerCase() === web3.utils.padLeft(config.recipient.toLowerCase(), 64) // Check 'to' address in topics
+      log.topics[0] === transferTopic && // Check event signature topic
+      log.topics[2] === recipientTopic // Check 'to' address in topics (topic 2 for indexed to)
     );
 
     if (transferLogs.length > 0) {
       // Decode the last Transfer event if multiple, or the most relevant one
       const decodedLog = web3.eth.abi.decodeLog(
-        transferLogs[0].topics, // Topics excluding signature
+        transferAbi.inputs, // Only inputs of the event ABI
         transferLogs[0].data,
-        swapWinjTokenContract.options.jsonInterface.find(i => i.name === 'Transfer' && i.type === 'event').inputs
+        transferLogs[0].topics.slice(1) // Remove event signature topic
       );
       winjReceived = decodedLog.value.toString();
-      console.log(`✨ دریافت شد: ${fromSmallestUnit(winjReceived, TOKEN_DECIMALS.SWAP_WINJ)} wINJ`);
+      console.log(`✨ دریافت شد: ${fromSmallestUnit(winjReceived, TOKEN_DECIMALS.SWAP_WINJ)} wINJ (سواپ)`);
 
       // ذخیره در فایل JSON
       const swapOutputs = await readSwapOutputs();
@@ -484,7 +443,7 @@ async function executeSwapUsdtToWinj(nonce, runTimeKey) {
 /**
  * اجرای تراکنش سواپ wINJ به USDT با مقدار ورودی دینامیک
  * @param {number} nonce - Nonce فعلی
- * @param {string} runTimeKeyForInput - کلید زمان اجرای سواپ قبلی (مثلاً "12:00")
+ * @param {string} runTimeKeyForInput - کلید زمان اجرای سواپ قبلی (مثلاً "12:00" یا "19:00")
  * @returns {Promise<number>} Nonce جدید
  */
 async function executeSwapWinjToUsdt(nonce, runTimeKeyForInput) {
@@ -500,33 +459,39 @@ async function executeSwapWinjToUsdt(nonce, runTimeKeyForInput) {
     return nonce; // Nonce را افزایش نمی‌دهیم
   }
 
-  console.log(`   🔸 سواپینگ ${fromSmallestUnit(inputAmountWinj, TOKEN_DECIMALS.SWAP_WINJ)} wINJ به USDT...`);
+  console.log(`   🔸 سواپینگ ${fromSmallestUnit(inputAmountWinj, TOKEN_DECIMALS.SWAP_WINJ)} wINJ (سواپ) به USDT...`);
 
   const minAmountOutWei = toSmallestUnit(config.minAmountOut, TOKEN_DECIMALS.USDT);
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const deadline = BigInt(currentTimestamp + (60 * 10)); // 10 دقیقه از الان
 
-  // بازسازی فیلد 'data' بر اساس نمونه ارسالی شما (با جایگذاری مقدار inputAmountWinj)
-  // فرمت نمونه: MethodID + path[0] + path[1] + amountIn + to + deadline + minAmountOut + unknown1 + unknown2
-  const fixedPart1 = '414bf389' + // Method ID
-                     web3.utils.padLeft(CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN.substring(2), 64) + // path[0] SWAP_WINJ
-                     web3.utils.padLeft(CONTRACT_ADDRESSES.USDT_TOKEN.substring(2), 64); // path[1] USDT
+  // بازسازی دقیق فیلد Data بر اساس نمونه شما
+  const methodId = config.methodId.substring(2); // حذف '0x'
+  const winjSwapAddrPadded = web3.utils.padLeft(CONTRACT_ADDRESSES.SWAP_WINJ_TOKEN.substring(2), 64);
+  const usdtAddrPadded = web3.utils.padLeft(CONTRACT_ADDRESSES.USDT_TOKEN.substring(2), 64);
+  const inputAmountPadded = web3.utils.padLeft(web3.utils.toHex(inputAmountWinj), 64).substring(2); // مقدار دینامیک
+  const recipientAddrPadded = web3.utils.padLeft(config.recipient.substring(2), 64);
+  const deadlinePadded = web3.utils.padLeft(web3.utils.toHex(deadline), 64).substring(2);
+  const minAmountOutPadded = web3.utils.padLeft(web3.utils.toHex(minAmountOutWei), 64).substring(2);
 
-  const fixedPart2 = web3.utils.padLeft(SENDER_ADDRESS.substring(2), 64) + // to address
-                     web3.utils.padLeft(web3.utils.toHex(deadline), 64).substring(2) + // deadline
-                     web3.utils.padLeft(web3.utils.toHex(minAmountOutWei), 64).substring(2); // minAmountOut
+  // پارامترهای ناشناس انتهایی از نمونه شما (ثابت، همانند سواپ اول)
+  const unknownParam1 = '00000000000000000000000000000000000000000000000000036861bb4b0c4b';
+  const unknownParam2 = '0000000000000000000000000000000000000000000000000000000000000000';
 
-  // پارامترهای ناشناس انتهایی از نمونه شما (همانند سواپ اول)
-  const unknownParam1 = '00000000000000000000000000000000000000000000000000036861bb4b0c4b'; // از نمونه سواپ USDT به wINJ
-  const unknownParam2 = '0000000000000000000000000000000000000000000000000000000000000000'; // از نمونه سواپ USDT به wINJ
-
-  const amountInPadded = web3.utils.padLeft(web3.utils.toHex(inputAmountWinj), 64).substring(2);
-
-  const fullData = '0x' + fixedPart1 + amountInPadded + fixedPart2 + unknownParam1 + unknownParam2;
+  const fullData = '0x' +
+                   methodId +
+                   winjSwapAddrPadded +
+                   usdtAddrPadded +
+                   inputAmountPadded +
+                   recipientAddrPadded +
+                   deadlinePadded +
+                   minAmountOutPadded +
+                   unknownParam1 +
+                   unknownParam2;
 
   const txObject = {
     to: config.contract,
-    value: '0x0', // مقدار اصلی از طریق data ارسال می‌شود
+    value: '0x0',
     gasLimit: config.gasLimit,
     data: fullData,
   };
@@ -563,7 +528,8 @@ async function main() {
     const schedules = Array.isArray(txConfig.schedule) ? txConfig.schedule : [txConfig.schedule];
 
     for (const schedule of schedules) {
-      if (currentHourUTC === schedule.hour && currentMinuteUTC >= schedule.minute && currentMinuteUTC < schedule.minute + 5) { // یک بازه 5 دقیقه‌ای برای شروع
+      // یک بازه 5 دقیقه‌ای برای شروع در نظر گرفته شده
+      if (currentHourUTC === schedule.hour && currentMinuteUTC >= schedule.minute && currentMinuteUTC < schedule.minute + 5) {
         shouldRun = true;
         break;
       }
@@ -583,22 +549,22 @@ async function main() {
           currentNonce = await executeUnstake(currentNonce);
           break;
         case 'SWAP_USDT_TO_WINJ':
-          // تعیین کلید برای ذخیره خروجی بر اساس زمان اجرا
-          const runTimeKeyUsdtToWinj = `${String(currentHourUTC).padStart(2, '0')}:${String(currentMinuteUTC).padStart(2, '0')}`;
-          currentNonce = await executeSwapUsdtToWinj(currentNonce, runTimeKeyUsdtToWinj);
+          // تعیین کلید برای ذخیره خروجی بر اساس زمان اجرای فعلی
+          const usdtToWinjRunTimeKey = `${String(currentHourUTC).padStart(2, '0')}:${String(currentMinuteUTC).padStart(2, '0')}`;
+          currentNonce = await executeSwapUsdtToWinj(currentNonce, usdtToWinjRunTimeKey);
           break;
         case 'SWAP_WINJ_TO_USDT':
-            let inputKey;
-            // تعیین کلید برای خواندن ورودی بر اساس زمان اجرا
+            let inputKeyForWinjToUsdt;
+            // تعیین کلید برای خواندن ورودی بر اساس زمان اجرای فعلی
             if (currentHourUTC === 20 && currentMinuteUTC >= 0) {
-                inputKey = '12:00';
-            } else if (currentHourUTC === 0 && currentMinuteUTC >= 0) { // 24:00 UTC is 00:00 next day
-                inputKey = '19:00';
+                inputKeyForWinjToUsdt = '12:00'; // اگر ساعت 20:00 هست، از خروجی 12:00 استفاده کن
+            } else if (currentHourUTC === 0 && currentMinuteUTC >= 0) { // 00:00 UTC (یعنی 24:00)
+                inputKeyForWinjToUsdt = '19:00'; // اگر ساعت 00:00 هست، از خروجی 19:00 استفاده کن
             } else {
                 console.warn(`⚠️ اخطار: زمان اجرای نامشخص برای سواپ wINJ به USDT. (${currentHourUTC}:${currentMinuteUTC})`);
                 break; // از اجرای این تراکنش صرف نظر می‌کنیم
             }
-          currentNonce = await executeSwapWinjToUsdt(currentNonce, inputKey);
+          currentNonce = await executeSwapWinjToUsdt(currentNonce, inputKeyForWinjToUsdt);
           break;
         default:
           console.warn(`⚠️ اخطار: نوع تراکنش ناشناخته: ${txConfig.type}`);
