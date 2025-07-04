@@ -21,7 +21,7 @@ if (IS_TEST_MODE) {
 }
 
 // اطلاعات شبکه Injective Testnet
-const RPC_URL = 'https://k8s.testnet.json-rpc.injective.network/';
+const RPC_URL = 'https://k8s.testnet.json-rpc.injective.network/api/eth-rpc'; // اصلاح شده
 const CHAIN_ID = 1439; // Chain ID تست‌نت Injective
 
 // تنظیمات Web3
