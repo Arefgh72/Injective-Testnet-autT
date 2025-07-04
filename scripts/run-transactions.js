@@ -1,9 +1,9 @@
 // scripts/run-transactions.js
 
-const Web3 = require('web3').default;
+const Web3 = require('web3').default; // اصلاح شده: Web3.default
 const { TransactionFactory } = require('@ethereumjs/tx');
-const { Common } = require('@ethereumjs/common');
-const fs = require('fs-extra'); // For async file operations like read/write JSON
+const { Common } = require('@ethereumjs/common'); // اصلاح شده: Common به عنوان named export
+const fs = require('fs-extra'); // برای عملیات ناهمزمان فایل‌ها مثل خواندن/نوشتن JSON
 
 // --- 1. تنظیمات (Configuration) ---
 
@@ -12,6 +12,12 @@ const PRIVATE_KEY = process.env.INJECTIVE_PRIVATE_KEY;
 if (!PRIVATE_KEY) {
   console.error('❌ خطا: متغیر محیطی INJECTIVE_PRIVATE_KEY تنظیم نشده است.');
   process.exit(1);
+}
+
+// بررسی حالت تست (TEST_MODE)
+const IS_TEST_MODE = process.env.TEST_MODE === 'true'; 
+if (IS_TEST_MODE) {
+  console.log('🧪 حالت تست فعال است. تمام تراکنش‌ها بدون بررسی زمان‌بندی اجرا خواهند شد.');
 }
 
 // اطلاعات شبکه Injective Testnet
@@ -226,7 +232,7 @@ async function sendTransaction(txObject, currentNonce) {
     // ساخت تراکنش با EthereumJS Tx
     const tx = TransactionFactory.fromTxData(txData, { common });
     const signedTx = tx.sign(privateKeyBytes);
-    const serializedTx = web3.utils.bytesToHex(signedTx.serialize()); // اصلاح شده
+    const serializedTx = web3.utils.bytesToHex(signedTx.serialize());
 
     console.log(`🚀 در حال ارسال تراکنش به: ${txObject.to}، Nonce: ${currentNonce}، Value: ${txObject.value && txObject.value !== '0x0' ? fromSmallestUnit(txObject.value, TOKEN_DECIMALS.INJ) : '0'} INJ`);
     const receipt = await web3.eth.sendSignedTransaction(serializedTx);
@@ -524,14 +530,18 @@ async function main() {
 
   for (const txConfig of ALL_TRANSACTIONS) {
     let shouldRun = false;
-    // بررسی زمان‌بندی: اگر schedule آرایه باشد (چندین زمان)، یا آبجکت باشد (یک زمان)
-    const schedules = Array.isArray(txConfig.schedule) ? txConfig.schedule : [txConfig.schedule];
 
-    for (const schedule of schedules) {
-      // یک بازه 5 دقیقه‌ای برای شروع در نظر گرفته شده
-      if (currentHourUTC === schedule.hour && currentMinuteUTC >= schedule.minute && currentMinuteUTC < schedule.minute + 5) {
-        shouldRun = true;
-        break;
+    if (IS_TEST_MODE) { // اگر در حالت تست هستیم، همیشه اجرا کن
+      shouldRun = true;
+      console.log(`\n--- 🧪 حالت تست فعال: اجرای فوری تراکنش "${txConfig.name}" ---`);
+    } else { // در حالت عادی، زمان‌بندی را بررسی کن
+      const schedules = Array.isArray(txConfig.schedule) ? txConfig.schedule : [txConfig.schedule];
+      for (const schedule of schedules) {
+        // یک بازه 5 دقیقه‌ای برای شروع در نظر گرفته شده
+        if (currentHourUTC === schedule.hour && currentMinuteUTC >= schedule.minute && currentMinuteUTC < schedule.minute + 5) {
+          shouldRun = true;
+          break;
+        }
       }
     }
 
@@ -556,10 +566,15 @@ async function main() {
         case 'SWAP_WINJ_TO_USDT':
             let inputKeyForWinjToUsdt;
             // تعیین کلید برای خواندن ورودی بر اساس زمان اجرای فعلی
-            if (currentHourUTC === 20 && currentMinuteUTC >= 0) {
-                inputKeyForWinjToUsdt = '12:00'; // اگر ساعت 20:00 هست، از خروجی 12:00 استفاده کن
-            } else if (currentHourUTC === 0 && currentMinuteUTC >= 0) { // 00:00 UTC (یعنی 24:00)
-                inputKeyForWinjToUsdt = '19:00'; // اگر ساعت 00:00 هست، از خروجی 19:00 استفاده کن
+            // اگر ساعت 20:00 هست، از خروجی 12:00 استفاده کن
+            // اگر ساعت 00:00 هست، از خروجی 19:00 استفاده کن
+            if (currentHourUTC === 20 && currentMinuteUTC >= 0) { 
+                inputKeyForWinjToUsdt = '12:00'; 
+            } else if (currentHourUTC === 0 && currentMinuteUTC >= 0) {
+                inputKeyForWinjToUsdt = '19:00'; 
+            } else if (IS_TEST_MODE) { // در حالت تست، از خروجی 12:00 استفاده کن یا اولویت بده
+                console.warn('⚠️ اخطار: در حالت تست، برای سواپ wINJ به USDT از خروجی 12:00 استفاده می‌شود.');
+                inputKeyForWinjToUsdt = '12:00'; 
             } else {
                 console.warn(`⚠️ اخطار: زمان اجرای نامشخص برای سواپ wINJ به USDT. (${currentHourUTC}:${currentMinuteUTC})`);
                 break; // از اجرای این تراکنش صرف نظر می‌کنیم
@@ -569,7 +584,7 @@ async function main() {
         default:
           console.warn(`⚠️ اخطار: نوع تراکنش ناشناخته: ${txConfig.type}`);
       }
-    } else {
+    } else if (!IS_TEST_MODE) { // اگر حالت تست نیست و اجرا نشد، پیغام بده
       console.log(`\n--- ⏭️ تراکنش "${txConfig.name}" در حال حاضر اجرا نمی‌شود. (${String(currentHourUTC).padStart(2, '0')}:${String(currentMinuteUTC).padStart(2, '0')} UTC) ---`);
     }
   }
