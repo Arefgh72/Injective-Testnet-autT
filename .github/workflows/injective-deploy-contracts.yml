@@ -4,8 +4,9 @@ name: Injective Daily Contract Deployment
 
 on:
   schedule:
+    # هر 30 دقیقه یک بار اجرا شود
     - cron: '*/30 * * * *' 
-  workflow_dispatch:
+  workflow_dispatch: # برای اجرای دستی
 
 jobs:
   deploy-contracts:
@@ -21,18 +22,18 @@ jobs:
       - name: 🛠️ Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.9' # تغییر به پایتون 3.9 (نسخه‌ای که solcx بهتر باهاش کار می‌کنه)
+          python-version: '3.9' # تغییر به پایتون 3.9 (pysolcx با 3.9 بهتر کار می‌کند)
 
       - name: 📦 Install Python Dependencies
-        run: pip install -r requirements.txt # web3.py, pytz, python-dotenv نصب میشن
+        # این مرحله pysolcx و بقیه وابستگی‌ها رو نصب می‌کنه
+        run: pip install -r requirements.txt 
 
-      - name: 🔧 Install solcx
-        run: pip install solcx # solcx رو به صورت مستقل نصب می‌کنیم (ورژن جدید خودش رو پیدا می‌کنه)
-
-      # نصب OpenZeppelin Contracts (برای Solidity imports) - این مرحله سرجاش می‌مونه
+      # **مهم:** نصب OpenZeppelin Contracts برای کامپایل MyNFT.sol
+      # این مرحله برای اینکه کامپایلر Solidity بتونه @openzeppelin/contracts رو پیدا کنه، ضروریه.
       - name: 📦 Install OpenZeppelin Contracts (for Solidity imports)
         run: |
           npm install @openzeppelin/contracts 
+        working-directory: ${{ github.workspace }} # در ریشه ریپازیتوری نصب شود
 
       - name: 🚀 Run Contract Deployment Script
         run: python scripts/deploy_contracts.py
