@@ -1,10 +1,10 @@
-# .github/workflows/injective-deploy-contracts.yml
+n# .github/workflows/injective-deploy-contracts.yml
 
 name: Injective Daily Contract Deployment
 
 on:
   schedule:
-    - cron: '*/30 * * * *' 
+    - cron: '*/59 * * * *' 
   workflow_dispatch: # برای اجرای دستی
 
 jobs:
